@@ -89,3 +89,17 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int sys_my_malloc(void) {
+  int size;
+  if(argint(0, &size) < 0) return 0;
+  void* res = my_malloc(size);
+  return (int) res;
+}
+
+int sys_my_free(void) {
+  int va;
+  if(argint(0, &va) < 0) return 0;
+  int res = my_free((void*)va);
+  return res;
+}

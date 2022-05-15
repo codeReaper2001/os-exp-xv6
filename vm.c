@@ -390,4 +390,81 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 // Blank page.
 //PAGEBREAK!
 // Blank page.
+typedef struct slab
+{
+  int size_per_object;
+  int num_objects;
+  char used_mask[256];
+  void* start_address;
+} slab;
 
+slab slabs[8];
+
+void slab_init() {
+  int size, i;
+  for(size = 16, i = 0; size <= 2048; size *= 2, i++) {
+    slabs[i].size_per_object = size;
+    slabs[i].num_objects = 4096 / size;
+    memset(slabs[i].used_mask, 0, 256);
+
+    slabs[i].start_address = kalloc();
+    cprintf("slab %d assign! address: %p\n", size, slabs[i].start_address);
+  }
+}
+
+int slab_alloc(pde_t* pgdir, void* va, uint sz) {
+  // illegal size
+  if (sz > 2048 || sz <= 0) {
+    return 0;
+  }
+
+  int size = 16, i = 0;
+  while (size < sz) {
+    size *= 2;
+    i++;
+  }
+  
+  int j;
+  for(j = 0; j < slabs[i].num_objects; j++) {
+    if(slabs[i].used_mask[j] == 0) break;
+  }
+
+  if(j == slabs[i].num_objects) return 0;
+
+  slabs[i].used_mask[j] = 1;
+
+  uint pa = (uint) slabs[i].start_address + j * slabs[i].size_per_object;
+  cprintf("assign from physical address: %p\n", pa);
+  mappages(pgdir, va, 4096, V2P(pa), PTE_W | PTE_U);
+
+  return j * slabs[i].size_per_object;
+}
+
+int slab_free(pde_t* pgdir, void* va) {
+  uint page_addr = (uint) uva2ka(pgdir, va);
+  uint page_offset = (uint)va & 4095;
+  uint pa = page_addr + page_offset;
+  cprintf("free physical address: %p\n", pa);
+
+  // find slab by physical address
+  int i;
+  for(i = 0; i < 8; i++) {
+    uint start = (uint)slabs[i].start_address;
+    uint end = start + slabs[i].num_objects * (uint)slabs[i].size_per_object;
+    if(start <= pa && pa < end)
+      break;
+  }
+
+  // find index in slab[i]
+  uint offset = pa - (uint)slabs[i].start_address;
+  int j = offset / slabs[i].size_per_object;
+
+  // change state
+  slabs[i].used_mask[j] = 0;
+
+  // remove address mapping
+  pte_t* pte = walkpgdir(pgdir, va, 0);
+  *pte = (uint)0;
+
+  return 1;
+}

@@ -475,3 +475,17 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+void* my_malloc(int size) {
+  int page_offset = slab_alloc(proc->pgdir, (char*)proc->sz, size);
+  uint oldsize = proc->sz;
+  proc->sz += 4096;
+
+  return (void*)oldsize + page_offset;
+}
+
+// slab free
+int my_free(void* va) {
+  int res = slab_free(proc->pgdir, va);
+  return res;
+}
