@@ -475,3 +475,10 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+int proc_getcpuid() {
+  pushcli();
+  int id = cpunum();
+  popcli();
+  return id;
+}
