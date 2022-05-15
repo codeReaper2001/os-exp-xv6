@@ -46,6 +46,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->priority=10;
 
   // Allocate kernel stack.
   if((p->kstack = kalloc()) == 0){
@@ -272,32 +273,40 @@ void
 scheduler(void)
 {
   struct proc *p;
+  int proc_num,last_proc_num, prio;
+  last_proc_num=0;
 
   for(;;){
     // Enable interrupts on this processor.
     sti();
-
+  
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
-
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-      swtch(&cpu->scheduler, p->context);
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      proc = 0;
-    }
+    for( prio=0; prio<20; prio++) {
+      for(proc_num = 0; proc_num < NPROC; proc_num++){ //扫描所有进程
+        p=ptable.proc+((last_proc_num+1+proc_num) % NPROC);
+        if(p->state != RUNNABLE)
+          continue;
+        if(p->priority!=prio)
+          continue;
+    
+        last_proc_num=(last_proc_num+1+proc_num) % NPROC; //下一次扫描点
+  
+        // Switch to chosen process. It is the process's job
+        // to release ptable.lock and then reacquire it
+        // before jumping back to us.
+        proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+        swtch(&cpu->scheduler, p->context);
+        switchkvm();
+      
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        proc = 0;
+      }//endif for proc_num
+    }//endif for prio
     release(&ptable.lock);
-
   }
 }
 
@@ -466,7 +475,7 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("%d %s %s", p->pid, state, p->name);
+    cprintf("\nPID=%d state=%s prio=%d %s :", p->pid, state,p->priority, p->name);
     if(p->state == SLEEPING){
       getcallerpcs((uint*)p->context->ebp+2, pc);
       for(i=0; i<10 && pc[i] != 0; i++)
@@ -481,4 +490,18 @@ int proc_getcpuid() {
   int id = cpunum();
   popcli();
   return id;
+}
+
+int
+chpri( int pid, int priority ) {
+  struct proc *p;
+  acquire(&ptable.lock);
+  for ( p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if ( p->pid == pid ) {
+      p->priority = priority;
+      break;
+    }
+  }
+  release(&ptable.lock);
+  return pid;
 }
