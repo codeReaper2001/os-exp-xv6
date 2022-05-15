@@ -174,6 +174,7 @@ UPROGS=\
 	_zombie\
 	_app\
 	_print-cpuid\
+	_loop\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)
