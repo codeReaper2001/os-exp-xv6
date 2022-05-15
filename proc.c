@@ -416,6 +416,18 @@ wakeup(void *chan)
   release(&ptable.lock);
 }
 
+void wakeup1p(void *chan) {
+  acquire(&ptable.lock);
+  struct proc *p;
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if(p->state == SLEEPING && p->chan == chan) {
+      p->state = RUNNABLE;
+      break;
+    }
+  }
+  release(&ptable.lock); 
+}
+
 // Kill the process with the given pid.
 // Process won't exit until it returns
 // to user space (see trap in trap.c).

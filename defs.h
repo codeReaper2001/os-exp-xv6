@@ -127,6 +127,8 @@ void            initlock(struct spinlock*, char*);
 void            release(struct spinlock*);
 void            pushcli(void);
 void            popcli(void);
+void            initsem ();
+void            wakeup1p(void *chan);
 
 // string.c
 int             memcmp(const void*, const void*, uint);
@@ -177,3 +179,5 @@ void            clearpteu(pde_t *pgdir, char *uva);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
+
+int sh_var_for_sem_demo;
