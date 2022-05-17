@@ -20,6 +20,7 @@ struct {
   struct spinlock lock;
   int use_lock;
   struct run *freelist;
+  uint pageref[PHYSTOP >> PGSHIFT]; // ref counter
 } kmem;
 
 // Initialization happens in two phases.
@@ -69,9 +70,18 @@ kfree(char *v)
 
   if(kmem.use_lock)
     acquire(&kmem.lock);
-  r = (struct run*)v;
-  r->next = kmem.freelist;
-  kmem.freelist = r;
+  {
+    if(kmem.pageref[V2P(v) >> PGSHIFT] > 0) {
+      kmem.pageref[V2P(v) >> PGSHIFT] -= 1;
+    }
+    if(kmem.pageref[V2P(v) >> PGSHIFT] == 0) {
+      memset(v, 1, PGSIZE);
+      r = (struct run*) v;
+      r->next = kmem.freelist;
+      kmem.freelist = r;
+    }
+  }
+  
   if(kmem.use_lock)
     release(&kmem.lock);
 }
@@ -87,10 +97,27 @@ kalloc(void)
   if(kmem.use_lock)
     acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r) {
     kmem.freelist = r->next;
+    kmem.pageref[V2P((char*) r) >> PGSHIFT] = 1;
+  }
   if(kmem.use_lock)
     release(&kmem.lock);
   return (char*)r;
+}
+
+uint pageref_get(uint pa) {
+  uint index = pa >> PGSHIFT;
+  acquire(&kmem.lock);
+  uint count = kmem.pageref[index];
+  release(&kmem.lock);
+  return count;
+}
+
+void pageref_set(uint pa, uint delta) {
+  uint index = pa >> PGSHIFT;
+  acquire(&kmem.lock);
+  kmem.pageref[index] += delta;
+  release(&kmem.lock);
 }
 

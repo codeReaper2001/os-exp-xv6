@@ -77,8 +77,8 @@ mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
   for(;;){
     if((pte = walkpgdir(pgdir, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_P)
-      panic("remap");
+    // if(*pte & PTE_P)
+    //   panic("remap");
     *pte = pa | perm | PTE_P;
     if(a == last)
       break;
@@ -341,6 +341,67 @@ copyuvm(pde_t *pgdir, uint sz)
 bad:
   freevm(d);
   return 0;
+}
+
+pde_t*
+copyuvm_onwrite(pde_t *pgdir, uint sz) {
+  pde_t *d;
+  pte_t *pte;
+  uint pa, i, flags;
+  char *mem;
+
+  if((d = setupkvm()) == 0)
+    return 0;
+  for(i = 0; i < sz; i += PGSIZE){
+    if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
+      panic("copyuvm: pte should exist");
+    if(!(*pte & PTE_P))
+      panic("copyuvm: page not present");
+
+    if(i >= 3 * PGSIZE) {
+      // 写禁止
+      *pte = ((*pte) & (~PTE_W));
+    }
+
+    pa = PTE_ADDR(*pte);
+    flags = PTE_FLAGS(*pte);
+    
+    if(i < 3 * PGSIZE) {
+      if((mem = kalloc()) == 0)
+        goto bad;
+      memmove(mem, (char*)P2V(pa), PGSIZE);
+      if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0)
+        goto bad;
+      cprintf("copy %p -> %p\n", P2V(pa), mem);
+    } 
+    else {
+      mappages(d, (void*)i, PGSIZE, pa, flags);
+      cprintf("lazy %p\n", P2V(pa));
+      pageref_set(pa, 1);
+    }
+  }
+  return d;
+
+bad:
+  freevm(d);
+  return 0;
+}
+
+void copy_on_write(pde_t* pgdir, void* va) {
+  pte_t* pte = walkpgdir(pgdir, va, 0);
+  uint pa = PTE_ADDR(*pte);
+  uint ref = pageref_get(pa);
+  if(ref > 1) {
+    pageref_set(pa, -1);
+    char* mem = kalloc();
+    memmove(mem, (char*)P2V(pa), PGSIZE);
+    mappages(pgdir, va, PGSIZE, V2P(mem), PTE_W | PTE_U);
+    cprintf("copy on write! copy: %p -> %p\n", P2V(pa), mem);
+  }
+  else {
+    *pte = (*pte) | PTE_W;
+    cprintf("page ref = 1, remove write forbidden!\n");
+  }
 }
 
 //PAGEBREAK!

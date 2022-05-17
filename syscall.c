@@ -83,6 +83,7 @@ extern int sys_dup(void);
 extern int sys_exec(void);
 extern int sys_exit(void);
 extern int sys_fork(void);
+extern int sys_my_fork(void);
 extern int sys_fstat(void);
 extern int sys_getpid(void);
 extern int sys_kill(void);
@@ -101,6 +102,7 @@ extern int sys_uptime(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
+[SYS_my_fork]    sys_my_fork,
 [SYS_exit]    sys_exit,
 [SYS_wait]    sys_wait,
 [SYS_pipe]    sys_pipe,

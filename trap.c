@@ -78,6 +78,11 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
 
+  case T_PGFLT:
+    cprintf("pid: %d trap, ", proc->pid);
+    copy_on_write(proc->pgdir, (char*)rcr2());
+    break;
+
   //PAGEBREAK: 13
   default:
     if(proc == 0 || (tf->cs&3) == 0){

@@ -67,6 +67,8 @@ char*           kalloc(void);
 void            kfree(char*);
 void            kinit1(void*, void*);
 void            kinit2(void*, void*);
+uint            pageref_get(uint pa);
+void            pageref_set(uint pa, uint delta);
 
 // kbd.c
 void            kbdintr(void);
@@ -104,6 +106,7 @@ int             pipewrite(struct pipe*, char*, int);
 // proc.c
 void            exit(void);
 int             fork(void);
+int             my_fork(void);
 int             growproc(int);
 int             kill(int);
 void            pinit(void);
@@ -170,6 +173,8 @@ void            freevm(pde_t*);
 void            inituvm(pde_t*, char*, uint);
 int             loaduvm(pde_t*, char*, struct inode*, uint, uint);
 pde_t*          copyuvm(pde_t*, uint);
+pde_t*          copyuvm_onwrite(pde_t *pgdir, uint sz);
+void            copy_on_write(pde_t* pgdir, void* va);
 void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
