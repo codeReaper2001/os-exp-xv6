@@ -172,6 +172,87 @@ fork(void)
   return pid;
 }
 
+//调用 clone()前需要分配好线程栈的内存空间，并通过 stack 参数传入
+int clone(void(*fcn)(void*), void* arg, void* stack)
+{
+  // cprintf("in clone, stack start addr = %p\n", stack); //打印本线程的堆栈
+  struct proc *curproc = proc; // 记录发出 clone 的进程（np->pthread 记录的父线程）
+  struct proc *np;
+  if((np = allocproc()) == 0) //为新线程分配 PCB/TCB
+    return -1; 
+
+  //由于共享进程映像，只需使用同一个页表即可，无需拷贝内容
+  np->pgdir = curproc->pgdir; // 线程间共用同一个页表
+  np->sz = curproc->sz;
+  np->pthread = curproc; // exit 时用于找到父进程并唤 醒
+  np->ustack = stack; //设置自己的线程栈
+  np->parent = 0;
+  *np->tf = *curproc->tf; // 继承 trapframe
+  int* sp = stack + 4096 - 8; //下面将在线程栈填写 8 
+  //在内核栈中“伪造”现场，假装成返回地址是 fcn、用户堆栈是线程栈
+  np->tf->eip = (int)fcn;
+  np->tf->esp = (int)sp; // top of stack
+  np->tf->ebp = (int)sp; // 栈帧指针
+  np->tf->eax = 0; 
+  // 在用户态栈“伪造”现场，将参数和返回地址（无用的）保存在里面
+  *(sp + 1) = (int)arg; // *(np->tf->esp+4) = (int)arg
+  *sp = 0xffffffff; // 返回地址（没有用到）
+  for(int i = 0; i < NOFILE; i++) // 复制文件描述符
+    if(curproc->ofile[i])
+      np->ofile[i] = filedup(curproc->ofile[i]);
+
+  np->cwd = idup(curproc->cwd);
+  safestrcpy(np->name, curproc->name, sizeof(curproc->name)); 
+  int pid = np->pid;
+
+  acquire(&ptable.lock);
+  np->state = RUNNABLE;
+  release(&ptable.lock);
+  // 返回新线程的 pid
+  return pid;
+}
+
+int
+join(void** stack)
+{
+  // cprintf("in join, stack pointer = %p\n", *stack);
+  struct proc *curproc = proc;
+  struct proc *p;
+  int havekids;
+  acquire(&ptable.lock);
+  for(;;) {
+    // scan through table looking for zombie children
+    havekids = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+      if(p->pthread != curproc) //判定是否自己的子线程
+        continue;
+      havekids = 1;
+      if(p->state == ZOMBIE) {
+        *stack = p->ustack; 
+        int pid = p->pid; 
+        kfree(p->kstack); //释放内核栈
+        p->kstack = 0;
+        p->state = UNUSED;
+        p->pid = 0;
+        p->parent = 0;
+        p->pthread = 0; // 记录父线程的指针 p->ustack = 0; // 线程用户态栈
+        p->name[0] = 0;
+        p->killed = 0;
+        release(&ptable.lock);
+        return pid;
+      }
+    }
+    // No point waiting if we don't have any children
+    if(!havekids || curproc->killed) {
+      release(&ptable.lock);
+      return -1;
+    }
+    // Wait for children to exit
+    sleep(curproc, &ptable.lock); 
+  }
+  return 0;
+}
+
 // Exit the current process.  Does not return.
 // An exited process remains in the zombie state
 // until its parent calls wait() to find out it exited.
@@ -200,7 +281,10 @@ exit(void)
   acquire(&ptable.lock);
 
   // Parent might be sleeping in wait().
-  wakeup1(proc->parent);
+  if(proc->parent == 0 && proc->pthread != 0) 
+    wakeup1(proc->pthread);
+  else
+    wakeup1(proc->parent);
 
   // Pass abandoned children to init.
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){

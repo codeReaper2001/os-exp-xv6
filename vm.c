@@ -41,45 +41,77 @@ seginit(void)
 // Return the address of the PTE in page table pgdir
 // that corresponds to virtual address va.  If alloc!=0,
 // create any required page table pages.
+/**
+ * 函数的主要功能是获取用户态虚拟地址对应的二级页表项（当前还不知道指向的值是什么）
+ * @param pagdir 一级页表指针
+ * @param va 用户态虚拟地址
+ * @param alloc 不存在二级页表时是否创建二级页表
+ * @return {pte_t*} 返回对应的二级页表项指针
+ */
 static pte_t *
 walkpgdir(pde_t *pgdir, const void *va, int alloc)
 {
   pde_t *pde;
   pte_t *pgtab;
 
+  // (((uint)(va) >> PDXSHIFT) & 0x3FF) va左移22位
+  // 得到一级页表项，将其指针放到pde中，指针指向的值为二级页表地址
   pde = &pgdir[PDX(va)];
+  // 判断二级页表是否存在
   if(*pde & PTE_P){
+    // 存在二级页表，则获取一级页表对应项entry的高22位，将其转换为内核虚拟地址，即得到二级页表地址
     pgtab = (pte_t*)P2V(PTE_ADDR(*pde));
   } else {
+    // 不存在对应的二级页表
+    // 如果不需要创建二级页表，则返回0，否则创建二级页表
     if(!alloc || (pgtab = (pte_t*)kalloc()) == 0)
       return 0;
     // Make sure all those PTE_P bits are zero.
+    // 二级页表清零
     memset(pgtab, 0, PGSIZE);
     // The permissions here are overly generous, but they can
     // be further restricted by the permissions in the page table
     // entries, if necessary.
+    // 申请了二级页表后，更新一级页表项
+    // 更新为：二级页表的虚拟地址->物理地址 | Present | Write | User (后面三个即权限)
     *pde = V2P(pgtab) | PTE_P | PTE_W | PTE_U;
   }
+  // 从二级页表中找到对应的项，将该项的指针返回
   return &pgtab[PTX(va)];
 }
 
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned.
+/**
+ * 将虚拟地址到物理地址的映射写入到页表中
+ * @param pagdir 一级页表指针
+ * @param va 用户态虚拟地址
+ * @param size 从va开始的大小，用于计算需要分配的物理页数量
+ * @param pa 物理地址
+ * @param perm ？
+ * @return {int} 0 映射成功 ： -1 映射失败
+ */
 static int
 mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
 {
   char *a, *last;
   pte_t *pte;
 
+  // 对齐
   a = (char*)PGROUNDDOWN((uint)va);
   last = (char*)PGROUNDDOWN(((uint)va) + size - 1);
   for(;;){
+    // 获取虚拟地址a的二级页表项，为0表示不存在时分配失败
     if((pte = walkpgdir(pgdir, a, 1)) == 0)
       return -1;
+    // 如果va这个虚拟地址对齐后已经有对应的物理地址，即已经映射过
+    // 则panic重复映射的错误
     if(*pte & PTE_P)
       panic("remap");
+    // 二级页表项的内容修改为：物理页物理地址 | perm | Present
     *pte = pa | perm | PTE_P;
+    // 查看是否还需要继续分配物理页并添加映射
     if(a == last)
       break;
     a += PGSIZE;
