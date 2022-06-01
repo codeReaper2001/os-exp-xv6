@@ -236,7 +236,7 @@ bad:
 }
 
 static struct inode*
-create(char *path, short type, short major, short minor)
+create(char *path, char type, short major, short minor)
 {
   uint off;
   struct inode *ip, *dp;
@@ -437,5 +437,26 @@ sys_pipe(void)
   }
   fd[0] = fd0;
   fd[1] = fd1;
+  return 0;
+}
+
+//添加系统调用sys_chmod()
+int sys_chmod(void) {
+  char *pathname; 
+  int mode; 
+  struct inode *ip; 
+  if(argstr(0, &pathname) < 0 || argint(1, &mode) < 0) 
+    return -1;
+  begin_op();
+  if((ip = namei(pathname)) == 0) 
+  { 
+    end_op(); 
+    return -1; 
+  }
+  ilock(ip); 
+  ip->mode = (char)mode; 
+  iupdate(ip); 
+  iunlock(ip);
+  end_op();
   return 0;
 }

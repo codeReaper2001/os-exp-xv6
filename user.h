@@ -23,6 +23,7 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+int chmod(const char* pathname, char mode); //添加系统调用
 
 // ulib.c
 int stat(char*, struct stat*);

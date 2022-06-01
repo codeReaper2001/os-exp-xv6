@@ -16,7 +16,8 @@ struct inode {
   int ref;            // Reference count
   int flags;          // I_BUSY, I_VALID
 
-  short type;         // copy of disk inode
+  char type;         // copy of disk inode
+  char mode;         //添加权限位
   short major;
   short minor;
   short nlink;

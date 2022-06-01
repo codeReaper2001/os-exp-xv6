@@ -103,6 +103,12 @@ fileread(struct file *f, char *addr, int n)
     return piperead(f->pipe, addr, n);
   if(f->type == FD_INODE){
     ilock(f->ip);
+
+    if((f->ip->mode & 1) == 0) {   //检查权限位
+      iunlock(f->ip);
+      return -1;
+    }
+
     if((r = readi(f->ip, addr, f->off, n)) > 0)
       f->off += r;
     iunlock(f->ip);
@@ -123,6 +129,16 @@ filewrite(struct file *f, char *addr, int n)
   if(f->type == FD_PIPE)
     return pipewrite(f->pipe, addr, n);
   if(f->type == FD_INODE){
+
+    begin_op(); ilock(f->ip);     //添加检查
+    if((f->ip->mode & 2) == 0) {
+      iunlock(f->ip);
+      end_op();
+      return -1;
+    }
+    iunlock(f->ip); 
+    end_op();
+
     // write a few blocks at a time to avoid exceeding
     // the maximum log transaction size, including
     // i-node, indirect block, allocation blocks,

@@ -178,7 +178,7 @@ static struct inode* iget(uint dev, uint inum);
 // Allocate a new inode with the given type on device dev.
 // A free inode has a type of zero.
 struct inode*
-ialloc(uint dev, short type)
+ialloc(uint dev, char type)
 {
   int inum;
   struct buf *bp;
@@ -190,6 +190,7 @@ ialloc(uint dev, short type)
     if(dip->type == 0){  // a free inode
       memset(dip, 0, sizeof(*dip));
       dip->type = type;
+      dip->mode = 3;    //初始化mode为3
       log_write(bp);   // mark it allocated on the disk
       brelse(bp);
       return iget(dev, inum);
@@ -209,6 +210,7 @@ iupdate(struct inode *ip)
   bp = bread(ip->dev, IBLOCK(ip->inum, sb));
   dip = (struct dinode*)bp->data + ip->inum%IPB;
   dip->type = ip->type;
+  dip->mode = ip->mode; //添加传递
   dip->major = ip->major;
   dip->minor = ip->minor;
   dip->nlink = ip->nlink;
@@ -286,6 +288,7 @@ ilock(struct inode *ip)
     bp = bread(ip->dev, IBLOCK(ip->inum, sb));
     dip = (struct dinode*)bp->data + ip->inum%IPB;
     ip->type = dip->type;
+    ip->mode = dip->mode;       //添加传递
     ip->major = dip->major;
     ip->minor = dip->minor;
     ip->nlink = dip->nlink;
@@ -429,6 +432,7 @@ stati(struct inode *ip, struct stat *st)
   st->dev = ip->dev;
   st->ino = ip->inum;
   st->type = ip->type;
+  st->mode = ip->mode;
   st->nlink = ip->nlink;
   st->size = ip->size;
 }
