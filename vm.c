@@ -235,8 +235,9 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
     mem = kalloc();
     if(mem == 0){
       cprintf("allocuvm out of memory\n");
-      deallocuvm(pgdir, newsz, oldsz);
-      return 0;
+      // deallocuvm(pgdir, newsz, oldsz);
+      // return 0;
+      break;
     }
     memset(mem, 0, PGSIZE);
     if(mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){
@@ -257,7 +258,7 @@ int
 deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 {
   pte_t *pte;
-  uint a, pa;
+  uint a, pa, flags;
 
   if(newsz >= oldsz)
     return oldsz;
@@ -269,10 +270,13 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       a += (NPTENTRIES - 1) * PGSIZE;
     else if((*pte & PTE_P) != 0){
       pa = PTE_ADDR(*pte);
+      flags = PTE_FLAGS(*pte);
       if(pa == 0)
         panic("kfree");
       char *v = P2V(pa);
-      kfree(v);
+      if((flags & PTE_SWAPPED) == 0) {
+        kfree(v);
+      }
       *pte = 0;
     }
   }
@@ -391,3 +395,71 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 //PAGEBREAK!
 // Blank page.
 
+void
+swapin(char* pa, uint blockno) {
+  read_page_from_disk(1, P2V(pa), blockno); 
+  bfree8(1, blockno);
+  cprintf("[swap in] block: %d --> va: %p, free block: %d\n", blockno, P2V(pa), blockno);
+}
+
+/*
+1.查看该进程的页表
+2.找一个有映射的页表项
+3.将其对应的页帧的内容，持久到文件系统
+4.释放其页帧
+*/
+uint 
+swapout(pde_t *pgdir, uint swap_start, uint sz) 
+{ // 换出一个物理页帧
+  // cprintf("%d 进程进入swapout \n",p->pid);
+  pte_t *pte;
+  uint a = swap_start; // 起始地址
+  // uint a = p->sz; // 起始地址
+  a = PGROUNDDOWN(a); // 向下取整
+  
+  // int sz = proc->swap_start;
+  
+  for(; a < sz; a += PGSIZE) {
+    pte = walkpgdir(pgdir, (char*)a, 0);
+    if(*pte  & PTE_P && ((*pte & PTE_SWAPPED) == 0 )) { // 找到一个映射页,并且没有被换出
+      uint pa = PTE_ADDR(*pte); // 获取高 20 位
+      begin_op();
+      uint blockno = balloc8(1); // 申请 8 个盘块
+      end_op();
+      // write data to disk
+      write_page_to_disk(1, (char*)P2V(pa), blockno); // 写入磁盘
+      
+      // kfree((char*)V2P(pa));//释放对应的页帧
+
+      *pte = (blockno << 12); // 记录盘块号
+      *pte = *pte | PTE_SWAPPED;//将其swapped位置1
+      cprintf("[swap out] va: %p --> block: %d, get free page pa: %p\n", a, blockno, P2V(pa));
+      return pa;
+    }
+  }
+  return 0;
+}
+
+
+void
+pgfault(pde_t* pgdir, void* va, uint swap_start, uint sz)
+{
+  va = (char*)PGROUNDDOWN((uint)va);
+  pte_t* pte = walkpgdir(proc->pgdir, va, 0);
+  uint flags = PTE_FLAGS(*pte);
+
+  // find a physical page
+  char* mem = kalloc();
+  if(mem == 0) mem = (char*)swapout(pgdir, swap_start, sz);
+  if(mem == 0) panic("can not find swap page!");
+
+  if(flags & PTE_SWAPPED) {
+    uint blockno = (*pte) >> 12;
+    swapin(mem, blockno);
+    *pte = (*pte) & (~PTE_SWAPPED);
+  }
+
+  // 最后建立映射
+  mappages(proc->pgdir, va, PGSIZE, (uint)mem, PTE_W | PTE_U);
+  cprintf("[pg fault] map va: %p to pa: %p\n", va, V2P(mem));
+}

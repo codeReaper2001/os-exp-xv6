@@ -152,6 +152,7 @@ fork(void)
   np->sz = proc->sz;
   np->parent = proc;
   *np->tf = *proc->tf;
+  proc->swap_start = proc->sz; // 初始化——swap_start
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;

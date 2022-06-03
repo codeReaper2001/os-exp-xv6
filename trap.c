@@ -77,6 +77,10 @@ trap(struct trapframe *tf)
             cpunum(), tf->cs, tf->eip);
     lapiceoi();
     break;
+  // 缺页中断处理
+  case T_PGFLT:
+    pgfault(proc->pgdir, (char*)rcr2(), proc->swap_start, proc->sz);
+    break;
 
   //PAGEBREAK: 13
   default:

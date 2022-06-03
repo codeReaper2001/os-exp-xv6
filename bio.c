@@ -143,3 +143,27 @@ brelse(struct buf *b)
 //PAGEBREAK!
 // Blank page.
 
+// blockno 起始的连续 8 块盘块数据拷贝到 va 起始的物理页帧中
+void
+read_page_from_disk(int dev, char *va, uint blockno) 
+{
+  struct buf* b; // xv6 的读写必须经过缓存块
+  for(int i = 0; i < 8; i ++) { // 物理页帧分 8 片存入 8 个盘块
+    b = bread(dev, blockno + i); // 将磁盘数据读到缓存块
+    memmove(va + i * 512, b->data, 512); // 将缓存块数据写入物理页帧
+    brelse(b); // 释放缓存块
+  }
+}
+
+// 将 4096 字节的物理页帧写到 blockno 起始的连续 8 块盘块中
+void
+write_page_to_disk(int dev, char *va, uint blockno) 
+{
+  struct buf* b;
+  for(int i = 0; i < 8; i ++) {
+    b = bget(dev, blockno + i); // 获取设备 1 上第 blockno+i 个盘块
+    memmove(b->data, va + i * 512, 512); // 将数据移动到物理内存上
+    bwrite(b); // 写磁盘
+    brelse(b); // 释放缓存块
+  }
+}

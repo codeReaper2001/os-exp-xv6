@@ -94,6 +94,36 @@ bfree(int dev, uint b)
   brelse(bp);
 }
 
+uint
+balloc8(uint dev)
+{ 
+  for(uint b = 0; b < sb.size; b += BPB) { // 逐块遍历位图
+    struct buf* bp = bread(dev, BBLOCK(b, sb)); // 读取某一块位图
+    for(uint bi = 0; bi < 512 && b + bi * 8 < sb.size; bi ++) {
+      if(bp->data[bi] == 0) { // 连续 8 块未分配（1 字节）
+        bp->data[bi] = ~bp->data[bi]; // 按位取反，全1
+        log_write(bp);
+        // bwrite(bp); // 更新位图
+        brelse(bp); // 释放缓存位图的缓存块
+        return b + bi * 8; // 返回连续 8 块的第一块
+      }
+    }
+    brelse(bp);
+  }
+  panic("balloc: out of blocks");
+}
+
+
+ // Free 8 disk blocks
+void
+bfree8(int dev, uint b)
+{
+  begin_op();
+  for(uint i = 0; i < 8; i ++) // 逐个调用 bfree 即可
+    bfree(dev, b + i);
+  end_op();
+}
+
 // Inodes.
 //
 // An inode describes a single unnamed file.
