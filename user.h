@@ -24,6 +24,7 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int chmod(const char* pathname, char mode); //添加系统调用
+int open_fifo(char*, int);
 
 // ulib.c
 int stat(char*, struct stat*);

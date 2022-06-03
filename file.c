@@ -104,7 +104,7 @@ fileread(struct file *f, char *addr, int n)
   if(f->type == FD_INODE){
     ilock(f->ip);
 
-    if((f->ip->mode & 1) == 0) {   //检查权限位
+    if((f->ip->mode & 1) == 0 && f->ip->mode != FIFOMODE) {   //检查权限位
       iunlock(f->ip);
       return -1;
     }
@@ -131,7 +131,7 @@ filewrite(struct file *f, char *addr, int n)
   if(f->type == FD_INODE){
 
     begin_op(); ilock(f->ip);     //添加检查
-    if((f->ip->mode & 2) == 0) {
+    if((f->ip->mode & 2) == 0 && f->ip->mode != FIFOMODE) {
       iunlock(f->ip);
       end_op();
       return -1;
