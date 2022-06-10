@@ -2,4 +2,4 @@ xv6 is a re-implementation of Dennis Ritchie's and Ken Thompson's Unix
 Version 6 (v6).  xv6 loosely follows the structure and style of v6,
 but is implemented for a modern x86-based multiprocessor using ANSI C.
 
-项目为xv6的rev9版本，用于操作系统实验，当前已经写了综合实验一，一共五道题，代码位于exp1-xxx分支内
+项目为xv6的rev9版本，用于操作系统实验，当前已经完成了综合实验一和综合实验二，代码分别位于exp1-xxx和exp2-xxx分支内
